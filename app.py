@@ -19,7 +19,6 @@ def clamp_0_10(x):
     return max(0, min(10, x))
 
 def compute_score(state):
-    # Weighted score (you can tweak these)
     weights = {
         "health": 0.25,
         "travel": 0.15,
@@ -29,220 +28,175 @@ def compute_score(state):
     }
     raw = 0.0
     for k, w in weights.items():
-        raw += state[k] * w  # each category 0..10
-    # Convert 0..10 to 0..100
+        raw += state[k] * w
     return round(raw * 10)
 
 def risk_level(score):
-    if score <= 20:
-        return "Low ✅"
-    elif score <= 40:
-        return "Moderate 🙂"
-    elif score <= 60:
-        return "High ⚠️"
-    elif score <= 80:
-        return "Very High 🚨"
+    if score <= 20: return "Low ✅"
+    elif score <= 40: return "Moderate 🙂"
+    elif score <= 60: return "High ⚠️"
+    elif score <= 80: return "Very High 🚨"
     return "Critical 🛑"
 
 def parse_kv_log(text):
-    """
-    Accepts:
-    log health=7 travel=3 money=5 study=8 security=6
-    also accepts commas:
-    log health=7, travel=3
-    """
     t = text.lower().replace(",", " ").strip()
-    if not t.startswith("log "):
-        return None
-
+    if not t.startswith("log "): return None
     parts = t.split()
     updates = {}
     for p in parts[1:]:
         if "=" in p:
             key, val = p.split("=", 1)
-            key = key.strip()
-            val = val.strip()
             if key in CATEGORIES:
                 try:
-                    num = float(val)
-                    updates[key] = clamp_0_10(int(round(num)))
+                    updates[key] = clamp_0_10(int(float(val)))
                 except:
                     pass
     return updates if updates else {}
 
 def simple_advice(state, score):
     tips = []
+    if state["health"] >= 7: tips.append("🩺 Improve sleep and hydration.")
+    if state["study"] >= 7: tips.append("📚 Focus on closest deadline first.")
+    if state["money"] >= 7: tips.append("💸 Reduce non-essential spending.")
+    if state["security"] >= 7: tips.append("🔐 Change passwords & enable 2FA.")
+    if state["travel"] >= 7: tips.append("🚗 Avoid risky travel times.")
 
-    # Category tips
-    if state["health"] >= 7:
-        tips.append("🩺 Health: Sleep, hydration, and a 10–20 min walk today. Avoid junk/late-night screens.")
-    elif state["health"] >= 4:
-        tips.append("🩺 Health: Keep routine steady. Drink water + take short breaks.")
+    if score <= 40: tips.insert(0, "🙂 Risk manageable. Keep routine.")
+    elif score <= 70: tips.insert(0, "⚠️ Focus on highest risk area.")
+    else: tips.insert(0, "🚨 Take immediate safety steps.")
 
-    if state["travel"] >= 7:
-        tips.append("🚗 Travel: Avoid peak traffic, keep phone charged, and share live location if going far.")
-    elif state["travel"] >= 4:
-        tips.append("🚗 Travel: Leave early and keep emergency cash + powerbank.")
-
-    if state["money"] >= 7:
-        tips.append("💸 Money: Freeze non-essential spending for 48 hours. Track expenses today.")
-    elif state["money"] >= 4:
-        tips.append("💸 Money: Set a daily spending limit and note all purchases.")
-
-    if state["study"] >= 7:
-        tips.append("📚 Study: Do a 25-min focus sprint now. List deadlines and pick the closest one first.")
-    elif state["study"] >= 4:
-        tips.append("📚 Study: Make a 3-task plan for today (small + doable).")
-
-    if state["security"] >= 7:
-        tips.append("🔐 Security: Change important passwords, enable 2FA, and avoid unknown links.")
-    elif state["security"] >= 4:
-        tips.append("🔐 Security: Review privacy settings and update apps.")
-
-    # Overall tip based on score
-    if score <= 20:
-        tips.insert(0, "✅ Overall: You’re safe today. Just maintain your routine.")
-    elif score <= 40:
-        tips.insert(0, "🙂 Overall: Some risk is building. Fix 1–2 areas today.")
-    elif score <= 60:
-        tips.insert(0, "⚠️ Overall: Prioritize your highest category and reduce optional stress.")
-    elif score <= 80:
-        tips.insert(0, "🚨 Overall: Take action now—reduce workload, avoid risky travel, tighten spending.")
-    else:
-        tips.insert(0, "🛑 Overall: Critical level—pause non-essential activities and focus on safety essentials.")
-
-    return tips[:6]  # keep it short
+    return tips[:6]
 
 def help_text():
-    return (
-        "### Commands you can type\n"
-        "- `log health=7 travel=3 money=5 study=8 security=6`  (each 0–10)\n"
-        "- `score`  → show your current risk score\n"
-        "- `advice` → show simple advice\n"
-        "- `status` → show all category values\n"
-        "- `reset`  → clear everything\n\n"
-        "### Tips\n"
-        "- You can update only one value too: `log study=9`\n"
-        "- Higher number = higher risk.\n"
-    )
+    return """
+### Commands
+- log health=7 travel=3 money=5 study=8 security=6
+- score
+- advice
+- status
+- reset
+
+You can also say:
+"ask health questions"
+"""
 
 def format_status(state):
-    lines = []
-    for k in CATEGORIES:
-        lines.append(f"- **{k.title()}**: {state[k]}/10")
-    if state["last_updated"]:
-        lines.append(f"- **Last updated**: {state['last_updated']}")
-    return "\n".join(lines)
+    return "\n".join([f"- **{k.title()}**: {state[k]}/10" for k in CATEGORIES])
+
+# ---------- HEALTH QUESTION SYSTEM ----------
+HEALTH_QUESTIONS = [
+    ("sleep", "How many hours did you sleep last night?"),
+    ("symptoms", "Any symptoms? (none / mild / moderate / severe)"),
+    ("stress", "Stress level today (0-10)?"),
+    ("water", "Water intake? (low / ok / good)"),
+    ("activity", "Physical activity? (none / light / moderate)")
+]
+
+def health_score(ans):
+    score = 0
+    try:
+        if float(ans.get("sleep",7)) < 5: score += 3
+    except: pass
+    if "severe" in ans.get("symptoms",""): score += 4
+    if "moderate" in ans.get("symptoms",""): score += 2
+    try:
+        if int(ans.get("stress",3)) > 7: score += 3
+    except: pass
+    if "low" in ans.get("water",""): score += 1
+    if "none" in ans.get("activity",""): score += 1
+    return clamp_0_10(score)
 
 # ---------- Session State ----------
 if "risk_state" not in st.session_state:
     st.session_state.risk_state = DEFAULT_STATE.copy()
 
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": (
-                "Hi! I’m your **Daily Life Risk Checker Agent** 🛡️\n\n"
-                "You can talk normally (hello, etc.) or use commands.\n"
-                "Type `help` to see commands.\n"
-                "Example: `log health=6 travel=2 money=4 study=8 security=5`"
-            ),
-        }
-    ]
+    st.session_state.messages = [{"role":"assistant","content":"Hi 👋 I’m your Risk Checker Agent.\nType help."}]
+
+if "mode" not in st.session_state:
+    st.session_state.mode = None
+
+if "health_step" not in st.session_state:
+    st.session_state.health_step = 0
+
+if "health_answers" not in st.session_state:
+    st.session_state.health_answers = {}
 
 # ---------- UI ----------
 st.title("🛡️ Daily Life Risk Checker Agent")
-st.caption("ChatGPT-style: you type → I answer. I won’t ask questions unless you ask me.")
 
-# Show chat history
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Chat input
-user_text = st.chat_input("Type here… (try: hello, help, log ..., score, advice)")
+user_text = st.chat_input("Type here...")
 
 if user_text:
-    # Add user message
-    st.session_state.messages.append({"role": "user", "content": user_text})
-    with st.chat_message("user"):
-        st.markdown(user_text)
+    st.session_state.messages.append({"role":"user","content":user_text})
+    with st.chat_message("user"): st.markdown(user_text)
 
     text = user_text.strip()
-    lower = text.lower().strip()
-
+    lower = text.lower()
     state = st.session_state.risk_state
     reply = ""
 
-    # Commands
-    if lower in ["help", "/help", "commands"]:
+    # ---------- HEALTH MODE ----------
+    if st.session_state.mode == "health":
+        step = st.session_state.health_step
+        key,_q = HEALTH_QUESTIONS[step]
+        st.session_state.health_answers[key] = text
+        st.session_state.health_step += 1
+
+        if st.session_state.health_step >= len(HEALTH_QUESTIONS):
+            health_val = health_score(st.session_state.health_answers)
+            state["health"] = health_val
+            score = compute_score(state)
+
+            st.session_state.mode=None
+            st.session_state.health_step=0
+
+            reply = f"✅ Health Risk Updated: {health_val}/10\nOverall Score: {score}/100"
+        else:
+            reply = HEALTH_QUESTIONS[st.session_state.health_step][1]
+
+    # ---------- COMMANDS ----------
+    elif lower in ["help"]:
         reply = help_text()
 
-    elif lower in ["reset", "/reset", "clear"]:
-        st.session_state.risk_state = DEFAULT_STATE.copy()
-        reply = "✅ Reset done. Type `log health=...` to start again."
+    elif lower=="score":
+        score=compute_score(state)
+        reply=f"Score: {score}/100 ({risk_level(score)})"
 
-    elif lower in ["status", "/status"]:
-        reply = "### Current status\n" + format_status(state)
+    elif lower=="advice":
+        score=compute_score(state)
+        reply="\n".join(simple_advice(state,score))
 
-    elif lower in ["score", "/score"]:
-        score = compute_score(state)
-        reply = f"### Risk Score: **{score}/100**\n**Level:** {risk_level(score)}\n\n" + format_status(state)
+    elif lower=="status":
+        reply=format_status(state)
 
-    elif lower in ["advice", "/advice"]:
-        score = compute_score(state)
-        tips = simple_advice(state, score)
-        reply = f"### Advice (Score {score}/100 • {risk_level(score)})\n" + "\n".join([f"- {t}" for t in tips])
+    elif lower=="reset":
+        st.session_state.risk_state=DEFAULT_STATE.copy()
+        reply="Reset done"
 
     elif lower.startswith("log "):
-        updates = parse_kv_log(text)
-        if updates is None:
-            reply = "Type like: `log health=7 travel=3 money=5 study=8 security=6`"
-        elif updates == {}:
-            reply = "I couldn’t find valid values. Use 0–10 like: `log study=8`"
+        upd=parse_kv_log(text)
+        if upd:
+            state.update(upd)
+            reply="Updated ✅"
         else:
-            for k, v in updates.items():
-                state[k] = v
-            state["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            score = compute_score(state)
-            reply = (
-                "✅ Updated.\n\n"
-                f"### Risk Score: **{score}/100**\n**Level:** {risk_level(score)}\n\n"
-                "Type `advice` for tips or `status` to view categories."
-            )
+            reply="Format: log health=5 study=6"
+
+    # ---------- GREETINGS ----------
+    elif any(x in lower for x in ["hi","hello","salam","aoa"]):
+        reply="Hello 👋 I can track your risks or ask health questions. Type help."
+
+    elif "ask health" in lower or "ask questions" in lower:
+        st.session_state.mode="health"
+        st.session_state.health_step=0
+        reply=HEALTH_QUESTIONS[0][1]
 
     else:
-        # --- NEW: Greetings + small talk responses (FREE, no API) ---
-        greetings = ["hi", "hello", "hey", "assalam o alaikum", "assalamualaikum", "salam", "aoa"]
-        if any(g in lower for g in greetings):
-            reply = (
-                "Hello! 👋 I’m your **Daily Life Risk Checker Agent** 🛡️\n\n"
-                "You can use commands OR talk normally.\n\n"
-                "✅ Quick start:\n"
-                "- Type: `log health=6 travel=2 money=4 study=8 security=5`\n"
-                "- Then type: `score` or `advice`\n\n"
-                "Type `help` to see all commands."
-            )
-        elif "how are you" in lower or "how r you" in lower or "how are u" in lower:
-            reply = (
-                "I’m good 😊\n\n"
-                "Tell me your risks today (health/travel/money/study/security), "
-                "and I’ll calculate your risk score.\n\n"
-                "Example: `log health=5 study=7 security=4`"
-            )
-        elif "thank" in lower or "thanks" in lower:
-            reply = "You’re welcome! ✅ Type `score` anytime to see your risk score."
-        else:
-            # Default: explain what to do, without asking questions
-            reply = (
-                "I can track your daily risks and calculate a score.\n\n"
-                "Type `help` to see commands.\n"
-                "Example: `log health=6 travel=2 money=4 study=8 security=5`\n"
-                "Then type: `score` or `advice`."
-            )
+        reply="Type help to see options."
 
-    # Add assistant reply
-    st.session_state.messages.append({"role": "assistant", "content": reply})
-    with st.chat_message("assistant"):
-        st.markdown(reply)
+    st.session_state.messages.append({"role":"assistant","content":reply})
+    with st.chat_message("assistant"): st.markdown(reply)
