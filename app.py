@@ -144,6 +144,7 @@ if "messages" not in st.session_state:
             "role": "assistant",
             "content": (
                 "Hi! I’m your **Daily Life Risk Checker Agent** 🛡️\n\n"
+                "You can talk normally (hello, etc.) or use commands.\n"
                 "Type `help` to see commands.\n"
                 "Example: `log health=6 travel=2 money=4 study=8 security=5`"
             ),
@@ -160,7 +161,7 @@ for m in st.session_state.messages:
         st.markdown(m["content"])
 
 # Chat input
-user_text = st.chat_input("Type here… (try: help, log ..., score, advice)")
+user_text = st.chat_input("Type here… (try: hello, help, log ..., score, advice)")
 
 if user_text:
     # Add user message
@@ -212,13 +213,34 @@ if user_text:
             )
 
     else:
-        # Default: explain what to do, without asking questions
-        reply = (
-            "I can track your daily risks and calculate a score.\n\n"
-            "Type `help` to see commands.\n"
-            "Example: `log health=6 travel=2 money=4 study=8 security=5`\n"
-            "Then type: `score` or `advice`."
-        )
+        # --- NEW: Greetings + small talk responses (FREE, no API) ---
+        greetings = ["hi", "hello", "hey", "assalam o alaikum", "assalamualaikum", "salam", "aoa"]
+        if any(g in lower for g in greetings):
+            reply = (
+                "Hello! 👋 I’m your **Daily Life Risk Checker Agent** 🛡️\n\n"
+                "You can use commands OR talk normally.\n\n"
+                "✅ Quick start:\n"
+                "- Type: `log health=6 travel=2 money=4 study=8 security=5`\n"
+                "- Then type: `score` or `advice`\n\n"
+                "Type `help` to see all commands."
+            )
+        elif "how are you" in lower or "how r you" in lower or "how are u" in lower:
+            reply = (
+                "I’m good 😊\n\n"
+                "Tell me your risks today (health/travel/money/study/security), "
+                "and I’ll calculate your risk score.\n\n"
+                "Example: `log health=5 study=7 security=4`"
+            )
+        elif "thank" in lower or "thanks" in lower:
+            reply = "You’re welcome! ✅ Type `score` anytime to see your risk score."
+        else:
+            # Default: explain what to do, without asking questions
+            reply = (
+                "I can track your daily risks and calculate a score.\n\n"
+                "Type `help` to see commands.\n"
+                "Example: `log health=6 travel=2 money=4 study=8 security=5`\n"
+                "Then type: `score` or `advice`."
+            )
 
     # Add assistant reply
     st.session_state.messages.append({"role": "assistant", "content": reply})
